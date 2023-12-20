@@ -123,11 +123,26 @@ def find_best_match(row, df_excel_file1, pairs):
 
 # Function to start the comparison
 def start_compare(df_excel_file1, df_excel_file2, pairs):
+    # Initialize the progress bar
+    progress_bar = st.progress(0)
+    total_rows = len(df_excel_file2)
+
     # Apply the function to each row of EXCEL2
-    matched = df_excel_file2.apply(find_best_match, axis=1, args=(df_excel_file1, pairs))
+    matched_rows = []
+    for i, row in df_excel_file2.iterrows():
+        matched_row = find_best_match(row, df_excel_file1, pairs)
+        matched_rows.append(matched_row)
+
+        # Update the progress bar
+        progress = (i + 1) / total_rows
+        progress_bar.progress(progress)
+
+    matched = pd.DataFrame(matched_rows)
+
+    # Complete the progress bar
+    progress_bar.progress(1.0)
 
     # Combine the results with EXCEL2
-    # result = pd.concat([df_excel_file2, matched], axis=1)
     result = pd.concat([matched], axis=1)
 
     # Save to a new Excel file
