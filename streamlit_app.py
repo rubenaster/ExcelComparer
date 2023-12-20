@@ -82,86 +82,66 @@ for i, pair in enumerate(st.session_state.pairs):
 # Button to add a new pair
 st.button("Add new pair", on_click=add_pair)
 
-def find_best_match(row, df_excel_file1, pairs):
-    best_score = 0
-    best_match = None
+def optimized_find_best_match(df_excel_file1, df_excel_file2, pairs):
+    # Preprocess DataFrame columns
+    for pair in pairs:
+        if pair['toggle']:
+            df_excel_file1[pair['text1']] = df_excel_file1[pair['text1']].str.strip().str.lower()
+            df_excel_file2[pair['text2']] = df_excel_file2[pair['text2']].str.strip().str.lower()
 
-    for _, excel1_row in df_excel_file1.iterrows():
-        current_score = 0
-        num_none_toogle_pairs = 0
-        for pair in pairs:
-            col_excel1 = pair['text1'].strip()
-            col_excel2 = pair['text2'].strip()
+    def calculate_match(row):
+        best_score = 0
+        best_match = None
+        for _, excel1_row in df_excel_file1.iterrows():
+            current_score = 0
+            num_none_toggle_pairs = 0
+            for pair in pairs:
+                if pair['toggle']:
+                    if row[pair['text2']] == excel1_row[pair['text1']]:
+                        return pd.Series([excel1_row[pair['text1']] for pair in pairs] + [100],
+                                         index=[pair['text2'] for pair in pairs] + ['Confidence Level'])
+                else:
+                    score = fuzz.ratio(row[pair['text2']], excel1_row[pair['text1']])
+                    current_score += score
+                    num_none_toggle_pairs += 1
 
-            if pair['toggle']:  # Only consider pairs with an enabled checkbox
-                if str(row[col_excel2]).strip().lower() == str(excel1_row[col_excel1]).strip().lower():
-                    best_score = 100
-                    best_match = excel1_row
-                    return pd.Series([best_match[pair['text1']] for pair in pairs] + [best_score],
-                         index=[pair['text2'] for pair in pairs] + ['Confidence Level'])
-            else:
-                # Calculate fuzzy match score
-                score = fuzz.ratio(str(row[col_excel2]).lower(), str(excel1_row[col_excel1]).lower())
-                current_score += score
-                num_none_toogle_pairs += 1
+            if num_none_toggle_pairs > 0:
+                current_score /= num_none_toggle_pairs
 
-        # Average the score based on the number of active pairs
-        active_pairs = num_none_toogle_pairs
-        if active_pairs > 0:
-            current_score /= active_pairs
+            if current_score > best_score:
+                best_score = current_score
+                best_match = excel1_row
 
-        if current_score > best_score:
-            best_score = current_score
-            best_match = excel1_row
+        if best_match is not None:
+            return pd.Series([best_match[pair['text1']] for pair in pairs] + [best_score],
+                             index=[pair['text2'] for pair in pairs] + ['Confidence Level'])
+        else:
+            return pd.Series([None] * len(pairs) + [best_score],
+                             index=[pair['text2'] for pair in pairs] + ['Confidence Level'])
 
-    if best_match is not None:
-        return pd.Series([best_match[pair['text1']] for pair in pairs] + [best_score],
-                         index=[pair['text2'] for pair in pairs] + ['Confidence Level'])
-    else:
-        return pd.Series([None] * active_pairs + [best_score],
-                         index=[pair['text2'] for pair in pairs] + ['Confidence Level'])
+    # Apply the optimized match calculation
+    return df_excel_file2.apply(calculate_match, axis=1)
 
-# Function to start the comparison
 def start_compare(df_excel_file1, df_excel_file2, pairs):
-    # Initialize the progress bar
     progress_bar = st.progress(0)
     total_rows = len(df_excel_file2)
 
-    # Apply the function to each row of EXCEL2
-    matched_rows = []
-    for i, row in df_excel_file2.iterrows():
-        matched_row = find_best_match(row, df_excel_file1, pairs)
-        matched_rows.append(matched_row)
+    matched = optimized_find_best_match(df_excel_file1, df_excel_file2, pairs)
 
-        # Update the progress bar
-        progress = (i + 1) / total_rows
-        progress_bar.progress(progress)
-
-    matched = pd.DataFrame(matched_rows)
-
-    # Complete the progress bar
     progress_bar.progress(1.0)
-
-    # Combine the results with EXCEL2
     result = pd.concat([matched], axis=1)
-
-    # Save to a new Excel file
     result.to_excel('MATCHES.xlsx', index=False)
     return result
 
-# Function to generate and download the Excel file
 def generate_and_download_excel(df_excel_file1, df_excel_file2, pairs):
-    # Apply the comparison function and get the result
     comparison_result = start_compare(df_excel_file1, df_excel_file2, pairs)
     
-    # Convert the DataFrame to Excel and use BytesIO as a buffer
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         comparison_result.to_excel(writer, index=False)
         writer.close()
     excel_data = output.getvalue()
 
-    # Provide a download button and return the buffer to the download button
     st.download_button(
         label="📁 Download Excel File",
         data=excel_data,
@@ -169,10 +149,8 @@ def generate_and_download_excel(df_excel_file1, df_excel_file2, pairs):
         mime="application/vnd.ms-excel"
     )
 
-# Button to start the comparison in the Streamlit app
 if st.button('Start Compare'):
     if excel_file1 is not None and excel_file2 is not None:
-        # Start the comparison process
         df_excel_file1 = pd.read_excel(excel_file1, skiprows=1)
         df_excel_file2 = pd.read_excel(excel_file2)
         generate_and_download_excel(df_excel_file1, df_excel_file2, st.session_state.pairs)
