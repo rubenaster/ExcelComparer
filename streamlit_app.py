@@ -4,6 +4,7 @@ import json
 from fuzzywuzzy import fuzz
 from io import BytesIO
 import os
+from joblib import Parallel, delayed
 
 # Directory to save configurations
 config_dir = 'configurations'
@@ -82,57 +83,55 @@ for i, pair in enumerate(st.session_state.pairs):
 # Button to add a new pair
 st.button("Add new pair", on_click=add_pair)
 
-def optimized_find_best_match(df_excel_file1, df_excel_file2, pairs):
-    # Preprocess DataFrame columns
+def preprocess_data(df, pairs, toggle_only=False):
     for pair in pairs:
-        if pair['toggle']:
-            df_excel_file1[pair['text1']] = df_excel_file1[pair['text1']].astype(str).str.strip().str.lower()
-            df_excel_file2[pair['text2']] = df_excel_file2[pair['text2']].astype(str).str.strip().str.lower()
+        col = pair['text1'] if toggle_only else pair['text2']
+        df[col] = df[col].astype(str).str.strip().str.lower()
+    return df
 
-    def calculate_match(row):
-        best_score = 0
-        best_match = None
-        for _, excel1_row in df_excel_file1.iterrows():
-            current_score = 0
-            num_none_toggle_pairs = 0
-            for pair in pairs:
-                if pair['toggle']:
-                    if row[pair['text2']] == excel1_row[pair['text1']]:
-                        return pd.Series([excel1_row[pair['text1']] for pair in pairs] + [100],
-                                         index=[pair['text2'] for pair in pairs] + ['Confidence Level'])
-                else:
-                    # Convert both values to strings before fuzzy matching
-                    value1 = str(row[pair['text2']])
-                    value2 = str(excel1_row[pair['text1']])
-                    score = fuzz.ratio(value1, value2)
-                    current_score += score
-                    num_none_toggle_pairs += 1
+def compare_row(args):
+    row, df_excel_file1, pairs = args
+    best_score = 0
+    best_match = None
 
-            if num_none_toggle_pairs > 0:
-                current_score /= num_none_toggle_pairs
+    for _, excel1_row in df_excel_file1.iterrows():
+        current_score = 0
+        num_none_toggle_pairs = 0
 
-            if current_score > best_score:
-                best_score = current_score
-                best_match = excel1_row
+        for pair in pairs:
+            if pair['toggle']:
+                if row[pair['text2']] == excel1_row[pair['text1']]:
+                    return [excel1_row[pair['text1']] for pair in pairs] + [100]
+            else:
+                score = fuzz.ratio(row[pair['text2']], excel1_row[pair['text1']])
+                current_score += score
+                num_none_toggle_pairs += 1
 
-        if best_match is not None:
-            return pd.Series([best_match[pair['text1']] for pair in pairs] + [best_score],
-                             index=[pair['text2'] for pair in pairs] + ['Confidence Level'])
-        else:
-            return pd.Series([None] * len(pairs) + [best_score],
-                             index=[pair['text2'] for pair in pairs] + ['Confidence Level'])
+        if num_none_toggle_pairs > 0:
+            current_score /= num_none_toggle_pairs
 
-    # Apply the optimized match calculation
-    return df_excel_file2.apply(calculate_match, axis=1)
+        if current_score > best_score:
+            best_score = current_score
+            best_match = excel1_row
+
+    if best_match is not None:
+        return [best_match[pair['text1']] for pair in pairs] + [best_score]
+    else:
+        return [None] * len(pairs) + [best_score]
 
 def start_compare(df_excel_file1, df_excel_file2, pairs):
-    progress_bar = st.progress(0)
-    total_rows = len(df_excel_file2)
+    # Preprocess data
+    df_excel_file1 = preprocess_data(df_excel_file1, pairs, toggle_only=True)
+    df_excel_file2 = preprocess_data(df_excel_file2, pairs)
 
-    matched = optimized_find_best_match(df_excel_file1, df_excel_file2, pairs)
+    args = [(row, df_excel_file1, pairs) for row in df_excel_file2.to_dict('records')]
 
-    progress_bar.progress(1.0)
-    result = pd.concat([matched], axis=1)
+    # Parallel processing
+    results = Parallel(n_jobs=-1, verbose=1)(delayed(compare_row)(arg) for arg in args)
+
+    matched = pd.DataFrame(results, columns=[pair['text2'] for pair in pairs] + ['Confidence Level'])
+
+    result = pd.concat([df_excel_file2, matched], axis=1)
     result.to_excel('MATCHES.xlsx', index=False)
     return result
 
