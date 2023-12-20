@@ -1,4 +1,5 @@
 fuzzywuzzy
+joblib
 openpyxl
 pandas
 python-Levenshtein
