@@ -1,4 +1,6 @@
-pandas
 fuzzywuzzy
-python-Levenshtein
+json
 openpyxl
+pandas
+python-Levenshtein
+streamlit
