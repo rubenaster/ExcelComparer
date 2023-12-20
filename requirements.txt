@@ -1,5 +1,4 @@
 fuzzywuzzy
-json
 openpyxl
 pandas
 python-Levenshtein
