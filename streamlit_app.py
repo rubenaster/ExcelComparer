@@ -86,8 +86,8 @@ def optimized_find_best_match(df_excel_file1, df_excel_file2, pairs):
     # Preprocess DataFrame columns
     for pair in pairs:
         if pair['toggle']:
-            df_excel_file1[pair['text1']] = df_excel_file1[pair['text1']].str.strip().str.lower()
-            df_excel_file2[pair['text2']] = df_excel_file2[pair['text2']].str.strip().str.lower()
+            df_excel_file1[pair['text1']] = df_excel_file1[pair['text1']].astype(str).str.strip().str.lower()
+            df_excel_file2[pair['text2']] = df_excel_file2[pair['text2']].astype(str).str.strip().str.lower()
 
     def calculate_match(row):
         best_score = 0
@@ -101,7 +101,10 @@ def optimized_find_best_match(df_excel_file1, df_excel_file2, pairs):
                         return pd.Series([excel1_row[pair['text1']] for pair in pairs] + [100],
                                          index=[pair['text2'] for pair in pairs] + ['Confidence Level'])
                 else:
-                    score = fuzz.ratio(row[pair['text2']], excel1_row[pair['text1']])
+                    # Convert both values to strings before fuzzy matching
+                    value1 = str(row[pair['text2']])
+                    value2 = str(excel1_row[pair['text1']])
+                    score = fuzz.ratio(value1, value2)
                     current_score += score
                     num_none_toggle_pairs += 1
 
