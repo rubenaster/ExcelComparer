@@ -122,7 +122,7 @@ def find_best_match(row, df_excel_file1, pairs):
                          index=[pair['text2'] for pair in pairs] + ['Confidence Level'])
 
 # Function to start the comparison
-def start_compare(dx_excel_file1, dx_excel_file2, pairs):
+def start_compare(df_excel_file1, df_excel_file2, pairs):
     # Apply the function to each row of EXCEL2
     matched = df_excel_file2.apply(find_best_match, axis=1, args=(df_excel_file1, pairs))
 
