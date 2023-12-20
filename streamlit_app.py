@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import json
 from fuzzywuzzy import fuzz
+from io import BytesIO
 import os
 
 # Directory to save configurations
@@ -121,11 +122,7 @@ def find_best_match(row, df_excel_file1, pairs):
                          index=[pair['text2'] for pair in pairs] + ['Confidence Level'])
 
 # Function to start the comparison
-def start_compare(excel_file1, excel_file2, pairs):
-    # Read the excel files
-    df_excel_file1 = pd.read_excel(excel_file1, skiprows=1)
-    df_excel_file2 = pd.read_excel(excel_file2)
-
+def start_compare(dx_excel_file1, dx_excel_file2, pairs):
     # Apply the function to each row of EXCEL2
     matched = df_excel_file2.apply(find_best_match, axis=1, args=(df_excel_file1, pairs))
 
@@ -137,11 +134,32 @@ def start_compare(excel_file1, excel_file2, pairs):
     result.to_excel('MATCHES.xlsx', index=False)
     return result
 
-# Logic to compare Excel files (to be implemented)
-if st.button('Compare'):
+# Function to generate and download the Excel file
+def generate_and_download_excel(df_excel_file1, df_excel_file2, pairs):
+    # Apply the comparison function and get the result
+    comparison_result = start_compare(df_excel_file1, df_excel_file2, pairs)
+    
+    # Convert the DataFrame to Excel and use BytesIO as a buffer
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        comparison_result.to_excel(writer, index=False)
+        writer.close()
+    excel_data = output.getvalue()
+
+    # Provide a download button and return the buffer to the download button
+    st.download_button(
+        label="📁 Download Excel File",
+        data=excel_data,
+        file_name="MATCHES.xlsx",
+        mime="application/vnd.ms-excel"
+    )
+
+# Button to start the comparison in the Streamlit app
+if st.button('Start Compare'):
     if excel_file1 is not None and excel_file2 is not None:
         # Start the comparison process
-        comparison_result = start_compare(excel_file1, excel_file2, st.session_state.pairs)
-        st.write(comparison_result)
+        df_excel_file1 = pd.read_excel(excel_file1, skiprows=1)
+        df_excel_file2 = pd.read_excel(excel_file2)
+        generate_and_download_excel(df_excel_file1, df_excel_file2, st.session_state.pairs)
     else:
         st.error("Please upload both Excel files and select at least one pair to compare.")
