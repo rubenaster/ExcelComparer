@@ -22,6 +22,17 @@ def add_pair():
 def delete_pair(index):
     del st.session_state.pairs[index]
 
+st.set_page_config(
+    page_title="Excel Files Comparison App",
+    page_icon="🧊",
+    layout="wide",
+    # menu_items={
+    #     'Get Help': 'https://www.extremelycoolapp.com/help',
+    #     'Report a bug': "https://www.extremelycoolapp.com/bug",
+    #     'About': "# This is a header. This is an *extremely* cool app!"
+    # }
+)
+
 st.title('Excel Files Comparison App')
 
 # Function to save pairs configuration to a file
